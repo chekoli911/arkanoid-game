@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>Арканоид</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            touch-action: none;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            overflow: hidden;
+            position: fixed;
+            width: 100%;
+            height: 100%;
+        }
+
+        #gameCanvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            background: #1a1a2e;
+        }
+
+        .screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background: rgba(26, 26, 46, 0.95);
+            color: white;
+            z-index: 10;
+        }
+
+        .screen.hidden {
+            display: none;
+        }
+
+        h1 {
+            font-size: 3rem;
+            margin-bottom: 2rem;
+            text-align: center;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+        }
+
+        h2 {
+            font-size: 2rem;
+            margin-bottom: 1.5rem;
+            text-align: center;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+        }
+
+        .btn {
+            padding: 1rem 2.5rem;
+            font-size: 1.5rem;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 50px;
+            cursor: pointer;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+            transition: transform 0.2s, box-shadow 0.2s;
+            touch-action: manipulation;
+        }
+
+        .btn:active {
+            transform: scale(0.95);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+        }
+
+        .info {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: white;
+            font-size: 1.2rem;
+            z-index: 5;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.7);
+        }
+
+        @media (max-width: 480px) {
+            h1 {
+                font-size: 2rem;
+            }
+            h2 {
+                font-size: 1.5rem;
+            }
+            .btn {
+                font-size: 1.2rem;
+                padding: 0.8rem 2rem;
+            }
+            .info {
+                font-size: 1rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas"></canvas>
+    
+    <div class="info" id="gameInfo">
+        <div>Уровень: <span id="levelDisplay">1</span></div>
+        <div>Шаров: <span id="ballsDisplay">1</span></div>
+        <div>Очки: <span id="scoreDisplay">0</span></div>
+        <div>Жизни: <span id="livesDisplay">3</span></div>
+    </div>
+
+    <!-- Экран старта -->
+    <div class="screen" id="startScreen">
+        <h1>🎮 АРКАНОИД</h1>
+        <button class="btn" id="startBtn">Играть</button>
+    </div>
+
+    <!-- Экран победы -->
+    <div class="screen hidden" id="winScreen">
+        <h2>🎉 ПОБЕДА!</h2>
+        <p style="font-size: 1.2rem; margin-bottom: 2rem; text-align: center;">Вы прошли все уровни!</p>
+        <button class="btn" id="restartWinBtn">Начать заново</button>
+    </div>
+
+    <!-- Экран поражения -->
+    <div class="screen hidden" id="gameOverScreen">
+        <h2>💀 ИГРА ОКОНЧЕНА</h2>
+        <p style="font-size: 1.2rem; margin-bottom: 2rem; text-align: center;">Все шары улетели!</p>
+        <button class="btn" id="restartGameOverBtn">Начать заново</button>
+    </div>
+
+    <script src="game.js"></script>
+</body>
+</html>
+
