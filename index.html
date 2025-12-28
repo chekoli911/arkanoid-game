@@ -91,6 +91,12 @@
             text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.7);
         }
 
+        @media (max-width: 768px) {
+            .info {
+                top: 70px;
+            }
+        }
+
         @media (max-width: 480px) {
             h1 {
                 font-size: 2rem;
@@ -112,30 +118,30 @@
     <canvas id="gameCanvas"></canvas>
     
     <div class="info" id="gameInfo">
-        <div>Уровень: <span id="levelDisplay">1</span></div>
-        <div>Шаров: <span id="ballsDisplay">1</span></div>
-        <div>Очки: <span id="scoreDisplay">0</span></div>
-        <div>Жизни: <span id="livesDisplay">3</span></div>
+        <div>Level: <span id="levelDisplay">1</span></div>
+        <div>Balls: <span id="ballsDisplay">1</span></div>
+        <div>Score: <span id="scoreDisplay">0</span></div>
+        <div>Lives: <span id="livesDisplay">❤️❤️❤️</span></div>
     </div>
 
     <!-- Экран старта -->
     <div class="screen" id="startScreen">
-        <h1>🎮 АРКАНОИД</h1>
-        <button class="btn" id="startBtn">Играть</button>
+        <h1>ARKANOID</h1>
+        <button class="btn" id="startBtn">Play</button>
     </div>
 
     <!-- Экран победы -->
     <div class="screen hidden" id="winScreen">
-        <h2>🎉 ПОБЕДА!</h2>
-        <p style="font-size: 1.2rem; margin-bottom: 2rem; text-align: center;">Вы прошли все уровни!</p>
-        <button class="btn" id="restartWinBtn">Начать заново</button>
+        <h2>VICTORY!</h2>
+        <p style="font-size: 1.2rem; margin-bottom: 2rem; text-align: center;">You completed all levels!</p>
+        <button class="btn" id="restartWinBtn">Play Again</button>
     </div>
 
     <!-- Экран поражения -->
     <div class="screen hidden" id="gameOverScreen">
-        <h2>💀 ИГРА ОКОНЧЕНА</h2>
-        <p style="font-size: 1.2rem; margin-bottom: 2rem; text-align: center;">Все шары улетели!</p>
-        <button class="btn" id="restartGameOverBtn">Начать заново</button>
+        <h2>GAME OVER</h2>
+        <p style="font-size: 1.2rem; margin-bottom: 2rem; text-align: center;">All balls are lost!</p>
+        <button class="btn" id="restartGameOverBtn">Play Again</button>
     </div>
 
     <script src="game.js"></script>

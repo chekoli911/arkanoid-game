@@ -464,7 +464,8 @@ function createBlock(x, y, width, height, startY, existingBlocks = []) {
 function generateLevel(level) {
     blocks = [];
     const cols = Math.floor(canvas.width / (BLOCK_WIDTH + BLOCK_PADDING));
-    const startY = 50;
+    const isMobile = window.innerWidth < 768;
+    const startY = isMobile ? 110 : 50; // 60px отступ + 50px для мобильных
     let blockCount = 0;
     const targetCount = 300 + (level - 1) * 100; // 300, 400, 500, 600, 700
 
@@ -935,17 +936,20 @@ function generateLevel(level) {
 
 function initGame() {
     // Создание платформы
+    const isMobile = window.innerWidth < 768;
+    const paddleY = isMobile ? canvas.height - 90 : canvas.height - 40;
     paddle = new Paddle(
         canvas.width / 2 - PADDLE_WIDTH / 2,
-        canvas.height - 40,
+        paddleY,
         PADDLE_WIDTH,
         PADDLE_HEIGHT
     );
 
     // Создание начального шара
+    const ballY = isMobile ? canvas.height - 110 : canvas.height - 60;
     balls = [new Ball(
         canvas.width / 2,
-        canvas.height - 60,
+        ballY,
         (Math.random() - 0.5) * BALL_SPEED,
         -BALL_SPEED
     )];
@@ -1052,9 +1056,11 @@ function update() {
             currentLevel++;
             generateLevel(currentLevel);
             // Сброс позиции шаров
+            const isMobile = window.innerWidth < 768;
+            const ballY = isMobile ? canvas.height - 110 : canvas.height - 60;
             balls = [new Ball(
                 canvas.width / 2,
-                canvas.height - 60,
+                ballY,
                 (Math.random() - 0.5) * BALL_SPEED,
                 -BALL_SPEED
             )];
@@ -1104,9 +1110,11 @@ function update() {
             gameOverScreen.classList.remove('hidden');
         } else {
             // Создаем новый шар, если есть жизни
+            const isMobile = window.innerWidth < 768;
+            const ballY = isMobile ? canvas.height - 110 : canvas.height - 60;
             balls = [new Ball(
                 canvas.width / 2,
-                canvas.height - 60,
+                ballY,
                 (Math.random() - 0.5) * BALL_SPEED,
                 -BALL_SPEED
             )];
@@ -1168,7 +1176,8 @@ function updateUI() {
     levelDisplay.textContent = currentLevel;
     ballsDisplay.textContent = balls.length;
     scoreDisplay.textContent = score;
-    livesDisplay.textContent = lives;
+    // Отображаем жизни символами сердец
+    livesDisplay.textContent = '❤️'.repeat(lives);
 }
 
 // ============================================
