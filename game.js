@@ -15,6 +15,12 @@ const levelDisplay = document.getElementById('levelDisplay');
 const ballsDisplay = document.getElementById('ballsDisplay');
 const scoreDisplay = document.getElementById('scoreDisplay');
 const livesDisplay = document.getElementById('livesDisplay');
+const startScreen = document.getElementById('startScreen');
+const levelSelectScreen = document.getElementById('levelSelectScreen');
+const pauseScreen = document.getElementById('pauseScreen');
+const resumeBtn = document.getElementById('resumeBtn');
+const backToMenuBtn = document.getElementById('backToMenuBtn');
+const levelGrid = document.getElementById('levelGrid');
 
 // ============================================
 // КОНСТАНТЫ И ПЕРЕМЕННЫЕ ИГРЫ
@@ -112,7 +118,15 @@ let isTouching = false;
 let score = 0; // Счет игрока
 let lives = 3; // Количество жизней
 let lastHeartScore = 0; // Счет, при котором последний раз упало сердце
+let lastPlatformBonusScore = 0; // Счет, при котором последний раз был бонус платформы
 let scoreAnimations = []; // Анимации очков
+let platformBonuses = []; // Падающие бонусы расширения платформы
+let paddleWide = false; // Платформа расширена
+let paddleWideTimer = 0; // Таймер расширенной платформы
+let gamePaused = false; // Пауза игры
+let tapCount = 0; // Счетчик тапов для паузы
+let lastTapTime = 0; // Время последнего тапа
+let unlockedLevels = 1; // Количество открытых уровней
 
 // Управление с клавиатуры
 let keys = {
@@ -235,6 +249,65 @@ class Ball {
     // Проверка выхода за нижнюю границу
     isOutOfBounds() {
         return this.y - this.radius > canvas.height;
+    }
+}
+
+// Класс бонуса расширения платформы
+class PlatformBonus {
+    constructor(x, y) {
+        this.x = x;
+        this.y = y;
+        this.width = 20;
+        this.height = 20;
+        this.speed = 3;
+    }
+
+    update() {
+        this.y += this.speed;
+    }
+
+    draw() {
+        ctx.save();
+        ctx.translate(this.x + this.width / 2, this.y + this.height / 2);
+        ctx.scale(this.width / 20, this.height / 20);
+        
+        // Рисуем иконку расширения (две стрелки)
+        ctx.fillStyle = '#ff9800';
+        ctx.beginPath();
+        // Левая стрелка
+        ctx.moveTo(-5, 0);
+        ctx.lineTo(-2, -3);
+        ctx.lineTo(-2, -1);
+        ctx.lineTo(2, -1);
+        ctx.lineTo(2, -3);
+        ctx.lineTo(5, 0);
+        ctx.lineTo(2, 3);
+        ctx.lineTo(2, 1);
+        ctx.lineTo(-2, 1);
+        ctx.lineTo(-2, 3);
+        ctx.closePath();
+        ctx.fill();
+        
+        // Правая стрелка
+        ctx.beginPath();
+        ctx.moveTo(5, 0);
+        ctx.lineTo(8, -3);
+        ctx.lineTo(8, -1);
+        ctx.lineTo(12, -1);
+        ctx.lineTo(12, -3);
+        ctx.lineTo(15, 0);
+        ctx.lineTo(12, 3);
+        ctx.lineTo(12, 1);
+        ctx.lineTo(8, 1);
+        ctx.lineTo(8, 3);
+        ctx.closePath();
+        ctx.fill();
+        
+        ctx.restore();
+    }
+
+    isOutOfBounds() {
+        return this.y > canvas.height;
     }
 }
 
@@ -421,8 +494,7 @@ function checkBallPaddleCollision(ball, paddle) {
             life: 60, // 60 кадров анимации
             alpha: 1.0
         });
-        // Убираем статус стартового шара после первого отбития
-        ball.isStarter = false;
+        // Красный шар остается красным до конца уровня
     }
 
     return true;
@@ -526,7 +598,7 @@ function isBlockOverlapping(x, y, width, height, existingBlocks) {
 }
 
 // Создание блока с автоматическим определением прочности и проверкой перекрытия
-function createBlock(x, y, width, height, startY, existingBlocks = []) {
+function createBlock(x, y, width, height, startY, existingBlocks = [], minDistanceFromPaddle = 0) {
     // Округляем координаты для точного позиционирования
     x = Math.round(x);
     y = Math.round(y);
@@ -534,6 +606,15 @@ function createBlock(x, y, width, height, startY, existingBlocks = []) {
     // Проверяем на перекрытие
     if (isBlockOverlapping(x, y, width, height, existingBlocks)) {
         return null; // Блок не создается, если перекрывается
+    }
+    
+    // Проверяем минимальное расстояние от платформы
+    if (minDistanceFromPaddle > 0) {
+        const isMobile = window.innerWidth < 768;
+        const paddleY = isMobile ? canvas.height - 130 : canvas.height - 40;
+        if (y + height > paddleY - minDistanceFromPaddle) {
+            return null; // Блок слишком близко к платформе
+        }
     }
     
     const health = getBlockHealth(y, startY);
@@ -545,9 +626,14 @@ function generateLevel(level) {
     blocks = [];
     const cols = Math.floor(canvas.width / (BLOCK_WIDTH + BLOCK_PADDING));
     const isMobile = window.innerWidth < 768;
-    const startY = isMobile ? 110 : 50; // 60px отступ + 50px для мобильных
+    // Интерфейс в 40px от верха, блоки начинаются ниже
+    const interfaceHeight = 40;
+    const startY = interfaceHeight + 30; // 30px отступ после интерфейса
+    // Минимальное расстояние от платформы
+    const paddleY = isMobile ? canvas.height - 130 : canvas.height - 40;
+    const minDistanceFromPaddle = 100; // Минимальное расстояние от платформы
     let blockCount = 0;
-    const targetCount = 300 + (level - 1) * 100; // 300, 400, 500, 600, 700
+    const targetCount = 300 + (level - 1) * 100; // 300, 400, 500, 600, 700...
 
     // Уровень 1: Пирамида
     if (level === 1) {
@@ -558,7 +644,7 @@ function generateLevel(level) {
             for (let col = 0; col < blocksInRow && blockCount < targetCount; col++) {
                 const x = Math.round(startX + col * (BLOCK_WIDTH + BLOCK_PADDING));
                 const y = Math.round(startY + row * (BLOCK_HEIGHT + BLOCK_PADDING));
-                const block = createBlock(x, y, BLOCK_WIDTH, BLOCK_HEIGHT, startY, blocks);
+                const block = createBlock(x, y, BLOCK_WIDTH, BLOCK_HEIGHT, startY, blocks, minDistanceFromPaddle);
                 if (block) {
                     blocks.push(block);
                     blockCount++;
@@ -576,7 +662,7 @@ function generateLevel(level) {
             for (let col = 0; col < blocksInRow && blockCount < targetCount; col++) {
                 const x = Math.round((midCol - blocksInRow) * (BLOCK_WIDTH + BLOCK_PADDING) + col * (BLOCK_WIDTH + BLOCK_PADDING));
                 const y = Math.round(startY + row * (BLOCK_HEIGHT + BLOCK_PADDING));
-                const block = createBlock(x, y, BLOCK_WIDTH, BLOCK_HEIGHT, startY, blocks);
+                const block = createBlock(x, y, BLOCK_WIDTH, BLOCK_HEIGHT, startY, blocks, minDistanceFromPaddle);
                 if (block) {
                     blocks.push(block);
                     blockCount++;
@@ -586,7 +672,7 @@ function generateLevel(level) {
             for (let col = 0; col < blocksInRow && blockCount < targetCount; col++) {
                 const x = Math.round(midCol * (BLOCK_WIDTH + BLOCK_PADDING) + col * (BLOCK_WIDTH + BLOCK_PADDING));
                 const y = Math.round(startY + row * (BLOCK_HEIGHT + BLOCK_PADDING));
-                const block = createBlock(x, y, BLOCK_WIDTH, BLOCK_HEIGHT, startY, blocks);
+                const block = createBlock(x, y, BLOCK_WIDTH, BLOCK_HEIGHT, startY, blocks, minDistanceFromPaddle);
                 if (block) {
                     blocks.push(block);
                     blockCount++;
@@ -603,7 +689,7 @@ function generateLevel(level) {
             const x = Math.round(centerX + Math.cos(angle) * radius - BLOCK_WIDTH / 2);
             const y = Math.round(centerY + Math.sin(angle) * radius - BLOCK_HEIGHT / 2);
             if (x >= 0 && x + BLOCK_WIDTH <= canvas.width && y >= startY) {
-                const block = createBlock(x, y, BLOCK_WIDTH, BLOCK_HEIGHT, startY, blocks);
+                const block = createBlock(x, y, BLOCK_WIDTH, BLOCK_HEIGHT, startY, blocks, minDistanceFromPaddle);
                 if (block) {
                     blocks.push(block);
                     blockCount++;
@@ -616,7 +702,7 @@ function generateLevel(level) {
                 const x = Math.round(centerX - 5 * (BLOCK_WIDTH + BLOCK_PADDING) + col * (BLOCK_WIDTH + BLOCK_PADDING));
                 const y = Math.round(centerY - 4 * (BLOCK_HEIGHT + BLOCK_PADDING) + row * (BLOCK_HEIGHT + BLOCK_PADDING));
                 if (x >= 0 && x + BLOCK_WIDTH <= canvas.width) {
-                    const block = createBlock(x, y, BLOCK_WIDTH, BLOCK_HEIGHT, startY, blocks);
+                    const block = createBlock(x, y, BLOCK_WIDTH, BLOCK_HEIGHT, startY, blocks, minDistanceFromPaddle);
                     if (block) {
                         blocks.push(block);
                         blockCount++;
@@ -635,7 +721,7 @@ function generateLevel(level) {
                 const x = Math.round(offset + col * (BLOCK_WIDTH + BLOCK_PADDING));
                 const y = Math.round(startY + row * (BLOCK_HEIGHT + BLOCK_PADDING));
                 if (x + BLOCK_WIDTH <= canvas.width) {
-                    const block = createBlock(x, y, BLOCK_WIDTH, BLOCK_HEIGHT, startY, blocks);
+                    const block = createBlock(x, y, BLOCK_WIDTH, BLOCK_HEIGHT, startY, blocks, minDistanceFromPaddle);
                     if (block) {
                         blocks.push(block);
                         blockCount++;
@@ -658,7 +744,7 @@ function generateLevel(level) {
             const x = Math.round(centerX + Math.cos(angle) * radius - BLOCK_WIDTH / 2);
             const y = Math.round(centerY + Math.sin(angle) * radius - BLOCK_HEIGHT / 2);
             if (x >= 0 && x + BLOCK_WIDTH <= canvas.width) {
-                const block = createBlock(x, y, BLOCK_WIDTH, BLOCK_HEIGHT, startY, blocks);
+                const block = createBlock(x, y, BLOCK_WIDTH, BLOCK_HEIGHT, startY, blocks, minDistanceFromPaddle);
                 if (block) {
                     blocks.push(block);
                     blockCount++;
@@ -673,7 +759,7 @@ function generateLevel(level) {
                 if ((row + col) % 3 !== 0) { // Пропуски для узора
                     const x = Math.round(col * (BLOCK_WIDTH + BLOCK_PADDING));
                     const y = Math.round(startY + row * (BLOCK_HEIGHT + BLOCK_PADDING));
-                    const block = createBlock(x, y, BLOCK_WIDTH, BLOCK_HEIGHT, startY, blocks);
+                    const block = createBlock(x, y, BLOCK_WIDTH, BLOCK_HEIGHT, startY, blocks, minDistanceFromPaddle);
                     if (block) {
                         blocks.push(block);
                         blockCount++;
@@ -692,7 +778,7 @@ function generateLevel(level) {
             const x = Math.round(centerX + Math.cos(angle) * radius - BLOCK_WIDTH / 2);
             const y = Math.round(centerY + Math.sin(angle) * radius - BLOCK_HEIGHT / 2);
             if (x >= 0 && x + BLOCK_WIDTH <= canvas.width && y >= startY) {
-                const block = createBlock(x, y, BLOCK_WIDTH, BLOCK_HEIGHT, startY, blocks);
+                const block = createBlock(x, y, BLOCK_WIDTH, BLOCK_HEIGHT, startY, blocks, minDistanceFromPaddle);
                 if (block) {
                     blocks.push(block);
                     blockCount++;
@@ -722,7 +808,7 @@ function generateLevel(level) {
             const x = Math.round(centerX - BLOCK_WIDTH / 2);
             const y = Math.round(startY + row * (BLOCK_HEIGHT + BLOCK_PADDING));
             if (y !== centerY) {
-                const block = createBlock(x, y, BLOCK_WIDTH, BLOCK_HEIGHT, startY, blocks);
+                const block = createBlock(x, y, BLOCK_WIDTH, BLOCK_HEIGHT, startY, blocks, minDistanceFromPaddle);
                 if (block) {
                     blocks.push(block);
                     blockCount++;
@@ -738,7 +824,7 @@ function generateLevel(level) {
                 const distFromCenterY = Math.abs(y - centerY);
                 // Упрощенное условие для избежания зависания
                 if (distFromCenterX > BLOCK_WIDTH * 3 || distFromCenterY > BLOCK_HEIGHT * 3) {
-                    const block = createBlock(x, y, BLOCK_WIDTH, BLOCK_HEIGHT, startY, blocks);
+                    const block = createBlock(x, y, BLOCK_WIDTH, BLOCK_HEIGHT, startY, blocks, minDistanceFromPaddle);
                     if (block) {
                         blocks.push(block);
                         blockCount++;
@@ -755,7 +841,7 @@ function generateLevel(level) {
                 if ((row + col) % 2 === 0) {
                     const x = Math.round(col * (BLOCK_WIDTH + BLOCK_PADDING));
                     const y = Math.round(startY + row * (BLOCK_HEIGHT + BLOCK_PADDING));
-                    const block = createBlock(x, y, BLOCK_WIDTH, BLOCK_HEIGHT, startY, blocks);
+                    const block = createBlock(x, y, BLOCK_WIDTH, BLOCK_HEIGHT, startY, blocks, minDistanceFromPaddle);
                     if (block) {
                         blocks.push(block);
                         blockCount++;
@@ -775,7 +861,7 @@ function generateLevel(level) {
             for (let col = 0; col < blocksInRow && blockCount < targetCount; col++) {
                 const x = Math.round(leftStartX + col * (BLOCK_WIDTH + BLOCK_PADDING));
                 const y = Math.round(startY + row * (BLOCK_HEIGHT + BLOCK_PADDING));
-                const block = createBlock(x, y, BLOCK_WIDTH, BLOCK_HEIGHT, startY, blocks);
+                const block = createBlock(x, y, BLOCK_WIDTH, BLOCK_HEIGHT, startY, blocks, minDistanceFromPaddle);
                 if (block) {
                     blocks.push(block);
                     blockCount++;
@@ -786,7 +872,7 @@ function generateLevel(level) {
             for (let col = 0; col < blocksInRow && blockCount < targetCount; col++) {
                 const x = Math.round(midStartX + col * (BLOCK_WIDTH + BLOCK_PADDING));
                 const y = Math.round(startY + row * (BLOCK_HEIGHT + BLOCK_PADDING));
-                const block = createBlock(x, y, BLOCK_WIDTH, BLOCK_HEIGHT, startY, blocks);
+                const block = createBlock(x, y, BLOCK_WIDTH, BLOCK_HEIGHT, startY, blocks, minDistanceFromPaddle);
                 if (block) {
                     blocks.push(block);
                     blockCount++;
@@ -798,7 +884,7 @@ function generateLevel(level) {
                 const x = Math.round(rightStartX + col * (BLOCK_WIDTH + BLOCK_PADDING));
                 const y = Math.round(startY + row * (BLOCK_HEIGHT + BLOCK_PADDING));
                 if (x + BLOCK_WIDTH <= canvas.width) {
-                    const block = createBlock(x, y, BLOCK_WIDTH, BLOCK_HEIGHT, startY, blocks);
+                    const block = createBlock(x, y, BLOCK_WIDTH, BLOCK_HEIGHT, startY, blocks, minDistanceFromPaddle);
                     if (block) {
                         blocks.push(block);
                         blockCount++;
@@ -817,7 +903,7 @@ function generateLevel(level) {
             for (let col = 0; col < blocksInRow && blockCount < targetCount; col++) {
                 const x = Math.round(startX + col * (BLOCK_WIDTH + BLOCK_PADDING));
                 const y = Math.round(startY + row * (BLOCK_HEIGHT + BLOCK_PADDING));
-                const block = createBlock(x, y, BLOCK_WIDTH, BLOCK_HEIGHT, startY, blocks);
+                const block = createBlock(x, y, BLOCK_WIDTH, BLOCK_HEIGHT, startY, blocks, minDistanceFromPaddle);
                 if (block) {
                     blocks.push(block);
                     blockCount++;
@@ -832,7 +918,7 @@ function generateLevel(level) {
                 const x = Math.round(startX + col * (BLOCK_WIDTH + BLOCK_PADDING));
                 const y = Math.round(startY + (diamondSize * 2 + 3) * (BLOCK_HEIGHT + BLOCK_PADDING) + row * (BLOCK_HEIGHT + BLOCK_PADDING));
                 if (y + BLOCK_HEIGHT < canvas.height - 100) {
-                    const block = createBlock(x, y, BLOCK_WIDTH, BLOCK_HEIGHT, startY, blocks);
+                    const block = createBlock(x, y, BLOCK_WIDTH, BLOCK_HEIGHT, startY, blocks, minDistanceFromPaddle);
                     if (block) {
                         blocks.push(block);
                         blockCount++;
@@ -852,7 +938,7 @@ function generateLevel(level) {
                 const x = Math.round(startX + col * (BLOCK_WIDTH + BLOCK_PADDING));
                 const y = Math.round(startY + row * (BLOCK_HEIGHT + BLOCK_PADDING));
                 if (x >= 0 && x + BLOCK_WIDTH <= canvas.width) {
-                    const block = createBlock(x, y, BLOCK_WIDTH, BLOCK_HEIGHT, startY, blocks);
+                    const block = createBlock(x, y, BLOCK_WIDTH, BLOCK_HEIGHT, startY, blocks, minDistanceFromPaddle);
                     if (block) {
                         blocks.push(block);
                         blockCount++;
@@ -871,7 +957,7 @@ function generateLevel(level) {
                 if (pattern !== 0 && pattern !== 2) {
                     const x = Math.round(col * (BLOCK_WIDTH + BLOCK_PADDING));
                     const y = Math.round(startY + row * (BLOCK_HEIGHT + BLOCK_PADDING));
-                    const block = createBlock(x, y, BLOCK_WIDTH, BLOCK_HEIGHT, startY, blocks);
+                    const block = createBlock(x, y, BLOCK_WIDTH, BLOCK_HEIGHT, startY, blocks, minDistanceFromPaddle);
                     if (block) {
                         blocks.push(block);
                         blockCount++;
@@ -890,17 +976,14 @@ function generateLevel(level) {
             const blocksOnCircle = Math.floor(circumference / (BLOCK_WIDTH + BLOCK_PADDING));
             for (let i = 0; i < blocksOnCircle && blockCount < targetCount; i++) {
                 const angle = (i / blocksOnCircle) * Math.PI * 2;
-                const x = centerX + Math.cos(angle) * radius - BLOCK_WIDTH / 2;
-                const y = centerY + Math.sin(angle) * radius - BLOCK_HEIGHT / 2;
+                const x = Math.round(centerX + Math.cos(angle) * radius - BLOCK_WIDTH / 2);
+                const y = Math.round(centerY + Math.sin(angle) * radius - BLOCK_HEIGHT / 2);
                 if (x >= 0 && x + BLOCK_WIDTH <= canvas.width && y >= startY) {
-                    const x = Math.round(startX + col * (BLOCK_WIDTH + BLOCK_PADDING));
-                const y = Math.round(startY + row * (BLOCK_HEIGHT + BLOCK_PADDING));
-                const block = createBlock(x, y, BLOCK_WIDTH, BLOCK_HEIGHT, startY, blocks);
-                if (block) {
-                    blocks.push(block);
-                    blockCount++;
-                }
-                    blockCount++;
+                    const block = createBlock(x, y, BLOCK_WIDTH, BLOCK_HEIGHT, startY, blocks, minDistanceFromPaddle);
+                    if (block) {
+                        blocks.push(block);
+                        blockCount++;
+                    }
                 }
             }
             radius += BLOCK_HEIGHT + BLOCK_PADDING + 5;
@@ -922,7 +1005,7 @@ function generateLevel(level) {
                         const x = Math.round(startX + col * (BLOCK_WIDTH + BLOCK_PADDING));
                         const y = Math.round(startY + row * (BLOCK_HEIGHT + BLOCK_PADDING));
                         if (x + BLOCK_WIDTH <= canvas.width) {
-                            const block = createBlock(x, y, BLOCK_WIDTH, BLOCK_HEIGHT, startY, blocks);
+                            const block = createBlock(x, y, BLOCK_WIDTH, BLOCK_HEIGHT, startY, blocks, minDistanceFromPaddle);
                             if (block) {
                                 blocks.push(block);
                                 blockCount++;
@@ -938,7 +1021,7 @@ function generateLevel(level) {
                 if ((row + col) % 3 === 0) {
                     const x = Math.round(col * (BLOCK_WIDTH + BLOCK_PADDING));
                     const y = Math.round(startY + row * (BLOCK_HEIGHT + BLOCK_PADDING));
-                    const block = createBlock(x, y, BLOCK_WIDTH, BLOCK_HEIGHT, startY, blocks);
+                    const block = createBlock(x, y, BLOCK_WIDTH, BLOCK_HEIGHT, startY, blocks, minDistanceFromPaddle);
                     if (block) {
                         blocks.push(block);
                         blockCount++;
@@ -961,7 +1044,7 @@ function generateLevel(level) {
             const x = Math.round(centerX + Math.cos(angle) * radius - BLOCK_WIDTH / 2);
             const y = Math.round(centerY + Math.sin(angle) * radius - BLOCK_HEIGHT / 2);
             if (x >= 0 && x + BLOCK_WIDTH <= canvas.width) {
-                const block = createBlock(x, y, BLOCK_WIDTH, BLOCK_HEIGHT, startY, blocks);
+                const block = createBlock(x, y, BLOCK_WIDTH, BLOCK_HEIGHT, startY, blocks, minDistanceFromPaddle);
                 if (block) {
                     blocks.push(block);
                     blockCount++;
@@ -980,7 +1063,7 @@ function generateLevel(level) {
                 );
                 // Пропускаем блоки слишком близко к центру звезды
                 if (distFromCenter > innerRadius + 30) {
-                    const block = createBlock(x, y, BLOCK_WIDTH, BLOCK_HEIGHT, startY, blocks);
+                    const block = createBlock(x, y, BLOCK_WIDTH, BLOCK_HEIGHT, startY, blocks, minDistanceFromPaddle);
                     if (block) {
                         blocks.push(block);
                         blockCount++;
@@ -992,17 +1075,14 @@ function generateLevel(level) {
         for (let row = 0; row < 5 && blockCount < targetCount; row++) {
             for (let col = 0; col < cols && blockCount < targetCount; col++) {
                 if (col < 3 || col > cols - 4) {
-                    const x = col * (BLOCK_WIDTH + BLOCK_PADDING);
-                    const y = startY + (gridRows + row) * (BLOCK_HEIGHT + BLOCK_PADDING);
-                    if (y + BLOCK_HEIGHT < canvas.height - 100) {
-                        const x = Math.round(startX + col * (BLOCK_WIDTH + BLOCK_PADDING));
-                const y = Math.round(startY + row * (BLOCK_HEIGHT + BLOCK_PADDING));
-                const block = createBlock(x, y, BLOCK_WIDTH, BLOCK_HEIGHT, startY, blocks);
-                if (block) {
-                    blocks.push(block);
-                    blockCount++;
-                }
-                        blockCount++;
+                    const x = Math.round(col * (BLOCK_WIDTH + BLOCK_PADDING));
+                    const y = Math.round(startY + (gridRows + row) * (BLOCK_HEIGHT + BLOCK_PADDING));
+                    if (y + BLOCK_HEIGHT < paddleY - minDistanceFromPaddle) {
+                        const block = createBlock(x, y, BLOCK_WIDTH, BLOCK_HEIGHT, startY, blocks, minDistanceFromPaddle);
+                        if (block) {
+                            blocks.push(block);
+                            blockCount++;
+                        }
                     }
                 }
             }
@@ -1015,6 +1095,11 @@ function generateLevel(level) {
 // ============================================
 
 function initGame() {
+    // Сброс расширения платформы
+    paddleWide = false;
+    platformBonuses = [];
+    lastPlatformBonusScore = 0;
+    
     // Создание платформы
     const isMobile = window.innerWidth < 768;
     const paddleY = isMobile ? canvas.height - 130 : canvas.height - 40;
@@ -1063,7 +1148,7 @@ function resetGame() {
 // ============================================
 
 function update() {
-    if (gameState !== 'playing') return;
+    if (gameState !== 'playing' || gamePaused) return;
 
     // Обновление платформы
     if (isTouching) {
@@ -1088,10 +1173,32 @@ function update() {
 
         // Проверка выхода за границы
         if (ball.isOutOfBounds()) {
-            balls.splice(i, 1);
-            // Вычитание очков за пропущенный шар
-            score = Math.max(0, score - 25); // Не даем счету уйти в минус
-            updateUI();
+            // Если это красный шар - отнимаем жизнь и создаем новый красный
+            if (ball.isStarter) {
+                lives--;
+                balls.splice(i, 1);
+                // Создаем новый красный шар
+                const isMobile = window.innerWidth < 768;
+                const ballY = isMobile ? canvas.height - 150 : canvas.height - 60;
+                balls.push(new Ball(
+                    canvas.width / 2,
+                    ballY,
+                    (Math.random() - 0.5) * BALL_SPEED,
+                    -BALL_SPEED,
+                    true // Красный шар
+                ));
+                updateUI();
+                
+                if (lives <= 0) {
+                    gameState = 'gameover';
+                    gameOverScreen.classList.remove('hidden');
+                }
+            } else {
+                // Обычный шар - просто удаляем
+                balls.splice(i, 1);
+                score = Math.max(0, score - 25);
+                updateUI();
+            }
             continue;
         }
 
@@ -1146,11 +1253,17 @@ function update() {
     // Проверка победы (все кубики разрушены)
     const remainingBlocks = blocks.filter(b => !b.destroyed).length;
     if (remainingBlocks === 0) {
-        if (currentLevel >= 15) {
+        if (currentLevel >= 30) {
             gameState = 'win';
             winScreen.classList.remove('hidden');
+            if (currentLevel > unlockedLevels) {
+                unlockedLevels = currentLevel;
+            }
         } else {
             currentLevel++;
+            if (currentLevel > unlockedLevels) {
+                unlockedLevels = currentLevel;
+            }
             generateLevel(currentLevel);
             // Сброс позиции шаров (новый стартовый шар)
             const isMobile = window.innerWidth < 768;
@@ -1162,6 +1275,9 @@ function update() {
                 -BALL_SPEED,
                 true // Стартовый шар
             )];
+            // Сброс расширения платформы
+            paddleWide = false;
+            paddle.width = PADDLE_WIDTH;
         }
         updateUI();
     }
@@ -1196,6 +1312,38 @@ function update() {
         // Создаем сердце в случайной позиции сверху
         const heartX = Math.random() * (canvas.width - 20);
         hearts.push(new Heart(heartX, -20));
+    }
+
+    // Проверка падения бонуса платформы (каждые 25,000 очков)
+    const platformBonusInterval = 25000;
+    if (score >= lastPlatformBonusScore + platformBonusInterval) {
+        lastPlatformBonusScore = Math.floor(score / platformBonusInterval) * platformBonusInterval;
+        // Создаем бонус в случайной позиции сверху
+        const bonusX = Math.random() * (canvas.width - 20);
+        platformBonuses.push(new PlatformBonus(bonusX, -20));
+    }
+
+    // Обновление бонусов платформы
+    for (let i = platformBonuses.length - 1; i >= 0; i--) {
+        const bonus = platformBonuses[i];
+        bonus.update();
+
+        // Проверка выхода за границы
+        if (bonus.isOutOfBounds()) {
+            platformBonuses.splice(i, 1);
+            continue;
+        }
+
+        // Столкновение с платформой
+        if (bonus.x < paddle.x + paddle.width &&
+            bonus.x + bonus.width > paddle.x &&
+            bonus.y < paddle.y + paddle.height &&
+            bonus.y + bonus.height > paddle.y) {
+            // Расширение платформы до конца уровня
+            paddleWide = true;
+            paddle.width = PADDLE_WIDTH * 2;
+            platformBonuses.splice(i, 1);
+        }
     }
 
     // Проверка проигрыша (все шары улетели)
@@ -1306,6 +1454,25 @@ function updateUI() {
 canvas.addEventListener('touchstart', (e) => {
     e.preventDefault();
     if (gameState === 'playing') {
+        // Проверка тройного тапа для паузы
+        const currentTime = Date.now();
+        if (currentTime - lastTapTime < 300) { // 300ms между тапами
+            tapCount++;
+        } else {
+            tapCount = 1;
+        }
+        lastTapTime = currentTime;
+        
+        if (tapCount >= 3) {
+            gamePaused = !gamePaused;
+            tapCount = 0;
+            if (gamePaused) {
+                pauseScreen.classList.remove('hidden');
+            } else {
+                pauseScreen.classList.add('hidden');
+            }
+        }
+        
         isTouching = true;
         touchX = e.touches[0].clientX;
     }
@@ -1365,10 +1532,51 @@ document.addEventListener('keyup', (e) => {
 });
 
 // Кнопки
+// Инициализация меню выбора уровней
+function initLevelSelect() {
+    if (!levelGrid) return;
+    levelGrid.innerHTML = '';
+    for (let i = 1; i <= 30; i++) {
+        const cube = document.createElement('div');
+        cube.className = 'levelCube';
+        if (i > unlockedLevels) {
+            cube.classList.add('locked');
+        }
+        cube.textContent = i;
+        cube.addEventListener('click', () => {
+            if (i <= unlockedLevels) {
+                currentLevel = i;
+                if (levelSelectScreen) levelSelectScreen.classList.add('hidden');
+                initGame();
+            }
+        });
+        levelGrid.appendChild(cube);
+    }
+}
+
 startBtn.addEventListener('click', () => {
-    startScreen.classList.add('hidden');
-    initGame();
+    if (startScreen) startScreen.classList.add('hidden');
+    if (levelSelectScreen) {
+        levelSelectScreen.classList.remove('hidden');
+        initLevelSelect();
+    } else {
+        initGame();
+    }
 });
+
+if (resumeBtn) {
+    resumeBtn.addEventListener('click', () => {
+        gamePaused = false;
+        if (pauseScreen) pauseScreen.classList.add('hidden');
+    });
+}
+
+if (backToMenuBtn) {
+    backToMenuBtn.addEventListener('click', () => {
+        if (levelSelectScreen) levelSelectScreen.classList.add('hidden');
+        if (startScreen) startScreen.classList.remove('hidden');
+    });
+}
 
 restartWinBtn.addEventListener('click', () => {
     winScreen.classList.add('hidden');
