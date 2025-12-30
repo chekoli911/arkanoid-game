@@ -112,6 +112,7 @@ let isTouching = false;
 let score = 0; // Счет игрока
 let lives = 3; // Количество жизней
 let lastHeartScore = 0; // Счет, при котором последний раз упало сердце
+let scoreAnimations = []; // Анимации очков
 
 // Управление с клавиатуры
 let keys = {
@@ -157,12 +158,13 @@ class Paddle {
 
 // Класс шара
 class Ball {
-    constructor(x, y, vx, vy) {
+    constructor(x, y, vx, vy, isStarter = false) {
         this.x = x;
         this.y = y;
         this.vx = vx;
         this.vy = vy;
         this.radius = BALL_RADIUS;
+        this.isStarter = isStarter; // Стартовый шар (красный)
     }
 
     update() {
@@ -183,26 +185,51 @@ class Ball {
     }
 
     draw() {
-        const gradient = ctx.createRadialGradient(
-            this.x - this.radius * 0.3,
-            this.y - this.radius * 0.3,
-            0,
-            this.x,
-            this.y,
-            this.radius
-        );
-        gradient.addColorStop(0, '#ffffff');
-        gradient.addColorStop(1, '#667eea');
-        
-        ctx.fillStyle = gradient;
-        ctx.beginPath();
-        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
-        ctx.fill();
-        
-        // Обводка
-        ctx.strokeStyle = '#764ba2';
-        ctx.lineWidth = 2;
-        ctx.stroke();
+        // Стартовый шар красного цвета
+        if (this.isStarter) {
+            const gradient = ctx.createRadialGradient(
+                this.x - this.radius * 0.3,
+                this.y - this.radius * 0.3,
+                0,
+                this.x,
+                this.y,
+                this.radius
+            );
+            gradient.addColorStop(0, '#ffffff');
+            gradient.addColorStop(1, '#ff1744');
+            
+            ctx.fillStyle = gradient;
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Обводка
+            ctx.strokeStyle = '#c51162';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+        } else {
+            // Обычный шар
+            const gradient = ctx.createRadialGradient(
+                this.x - this.radius * 0.3,
+                this.y - this.radius * 0.3,
+                0,
+                this.x,
+                this.y,
+                this.radius
+            );
+            gradient.addColorStop(0, '#ffffff');
+            gradient.addColorStop(1, '#667eea');
+            
+            ctx.fillStyle = gradient;
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Обводка
+            ctx.strokeStyle = '#764ba2';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+        }
     }
 
     // Проверка выхода за нижнюю границу
@@ -321,6 +348,43 @@ class Block {
 }
 
 // ============================================
+// ЗВУКИ
+// ============================================
+
+// Создание звука с помощью Web Audio API
+function playSound(frequency, duration, type = 'sine', volume = 0.3) {
+    try {
+        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        const oscillator = audioContext.createOscillator();
+        const gainNode = audioContext.createGain();
+        
+        oscillator.connect(gainNode);
+        gainNode.connect(audioContext.destination);
+        
+        oscillator.frequency.value = frequency;
+        oscillator.type = type;
+        
+        gainNode.gain.setValueAtTime(volume, audioContext.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + duration);
+        
+        oscillator.start(audioContext.currentTime);
+        oscillator.stop(audioContext.currentTime + duration);
+    } catch (e) {
+        // Игнорируем ошибки звука (например, если браузер не поддерживает)
+    }
+}
+
+// Звук при отбивании шара платформой
+function playPaddleSound() {
+    playSound(400, 0.1, 'square', 0.2);
+}
+
+// Звук при разбивании блока
+function playBlockSound() {
+    playSound(200, 0.15, 'sawtooth', 0.25);
+}
+
+// ============================================
 // ФУНКЦИИ СТОЛКНОВЕНИЙ
 // ============================================
 
@@ -344,6 +408,22 @@ function checkBallPaddleCollision(ball, paddle) {
     // Начисление очков за отбитый шар
     score += 100;
     updateUI();
+    
+    // Звук при отбивании
+    playPaddleSound();
+    
+    // Анимация +100 для стартового (красного) шара
+    if (ball.isStarter) {
+        scoreAnimations.push({
+            x: ball.x,
+            y: ball.y,
+            text: '+100',
+            life: 60, // 60 кадров анимации
+            alpha: 1.0
+        });
+        // Убираем статус стартового шара после первого отбития
+        ball.isStarter = false;
+    }
 
     return true;
 }
@@ -649,15 +729,15 @@ function generateLevel(level) {
                 }
             }
         }
-        // Заполнение вокруг креста
-        for (let row = 0; row < 15 && blockCount < targetCount; row++) {
+        // Заполнение вокруг креста (упрощенная логика)
+        for (let row = 0; row < 12 && blockCount < targetCount; row++) {
             for (let col = 0; col < cols && blockCount < targetCount; col++) {
                 const x = Math.round(col * (BLOCK_WIDTH + BLOCK_PADDING));
                 const y = Math.round(startY + row * (BLOCK_HEIGHT + BLOCK_PADDING));
                 const distFromCenterX = Math.abs(x - centerX);
                 const distFromCenterY = Math.abs(y - centerY);
-                if ((distFromCenterX > BLOCK_WIDTH * 2 || distFromCenterY > BLOCK_HEIGHT * 2) && 
-                    y !== centerY && Math.abs(x - centerX) > BLOCK_WIDTH) {
+                // Упрощенное условие для избежания зависания
+                if (distFromCenterX > BLOCK_WIDTH * 3 || distFromCenterY > BLOCK_HEIGHT * 3) {
                     const block = createBlock(x, y, BLOCK_WIDTH, BLOCK_HEIGHT, startY, blocks);
                     if (block) {
                         blocks.push(block);
@@ -937,7 +1017,7 @@ function generateLevel(level) {
 function initGame() {
     // Создание платформы
     const isMobile = window.innerWidth < 768;
-    const paddleY = isMobile ? canvas.height - 90 : canvas.height - 40;
+    const paddleY = isMobile ? canvas.height - 130 : canvas.height - 40;
     paddle = new Paddle(
         canvas.width / 2 - PADDLE_WIDTH / 2,
         paddleY,
@@ -945,13 +1025,14 @@ function initGame() {
         PADDLE_HEIGHT
     );
 
-    // Создание начального шара
-    const ballY = isMobile ? canvas.height - 110 : canvas.height - 60;
+    // Создание начального шара (красный)
+    const ballY = isMobile ? canvas.height - 150 : canvas.height - 60;
     balls = [new Ball(
         canvas.width / 2,
         ballY,
         (Math.random() - 0.5) * BALL_SPEED,
-        -BALL_SPEED
+        -BALL_SPEED,
+        true // Стартовый шар
     )];
 
     // Очистка сердец
@@ -973,6 +1054,7 @@ function resetGame() {
     lives = 3;
     lastHeartScore = 0;
     hearts = [];
+    scoreAnimations = [];
     initGame();
 }
 
@@ -1027,6 +1109,9 @@ function update() {
                 if (block.health <= 0) {
                     block.destroyed = true;
                     
+                    // Звук при разбивании блока
+                    playBlockSound();
+                    
                     // Деление шара только при полном разрушении блока
                     const newAngle = Math.atan2(ball.vy, ball.vx) + (Math.random() - 0.5) * 0.5;
                     const speed = Math.sqrt(ball.vx * ball.vx + ball.vy * ball.vy);
@@ -1046,6 +1131,18 @@ function update() {
     // Добавление новых шаров
     balls.push(...ballsToAdd);
 
+    // Обновление анимаций очков
+    for (let i = scoreAnimations.length - 1; i >= 0; i--) {
+        const anim = scoreAnimations[i];
+        anim.life--;
+        anim.y -= 2; // Движение вверх
+        anim.alpha = anim.life / 60; // Плавное исчезновение
+        
+        if (anim.life <= 0) {
+            scoreAnimations.splice(i, 1);
+        }
+    }
+
     // Проверка победы (все кубики разрушены)
     const remainingBlocks = blocks.filter(b => !b.destroyed).length;
     if (remainingBlocks === 0) {
@@ -1055,14 +1152,15 @@ function update() {
         } else {
             currentLevel++;
             generateLevel(currentLevel);
-            // Сброс позиции шаров
+            // Сброс позиции шаров (новый стартовый шар)
             const isMobile = window.innerWidth < 768;
-            const ballY = isMobile ? canvas.height - 110 : canvas.height - 60;
+            const ballY = isMobile ? canvas.height - 150 : canvas.height - 60;
             balls = [new Ball(
                 canvas.width / 2,
                 ballY,
                 (Math.random() - 0.5) * BALL_SPEED,
-                -BALL_SPEED
+                -BALL_SPEED,
+                true // Стартовый шар
             )];
         }
         updateUI();
@@ -1109,14 +1207,15 @@ function update() {
             gameState = 'gameover';
             gameOverScreen.classList.remove('hidden');
         } else {
-            // Создаем новый шар, если есть жизни
+            // Создаем новый шар, если есть жизни (новый стартовый шар)
             const isMobile = window.innerWidth < 768;
-            const ballY = isMobile ? canvas.height - 110 : canvas.height - 60;
+            const ballY = isMobile ? canvas.height - 150 : canvas.height - 60;
             balls = [new Ball(
                 canvas.width / 2,
                 ballY,
                 (Math.random() - 0.5) * BALL_SPEED,
-                -BALL_SPEED
+                -BALL_SPEED,
+                true // Стартовый шар
             )];
         }
     }
@@ -1155,6 +1254,25 @@ function draw() {
 
         // Отрисовка сердец
         hearts.forEach(heart => heart.draw());
+        
+        // Отрисовка анимаций очков
+        scoreAnimations.forEach(anim => {
+            ctx.save();
+            ctx.globalAlpha = anim.alpha;
+            ctx.font = 'bold 24px Arial';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            
+            // Тень
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+            ctx.fillText(anim.text, anim.x + 2, anim.y + 2);
+            
+            // Основной текст
+            ctx.fillStyle = '#4caf50';
+            ctx.fillText(anim.text, anim.x, anim.y);
+            
+            ctx.restore();
+        });
     }
 }
 
