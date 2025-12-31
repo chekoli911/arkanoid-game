@@ -15,7 +15,6 @@ const levelDisplay = document.getElementById('levelDisplay');
 const ballsDisplay = document.getElementById('ballsDisplay');
 const scoreDisplay = document.getElementById('scoreDisplay');
 const livesDisplay = document.getElementById('livesDisplay');
-const startScreen = document.getElementById('startScreen');
 const levelSelectScreen = document.getElementById('levelSelectScreen');
 const pauseScreen = document.getElementById('pauseScreen');
 const resumeBtn = document.getElementById('resumeBtn');
