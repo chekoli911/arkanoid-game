@@ -125,7 +125,28 @@ let paddleWideTimer = 0; // Таймер расширенной платформ
 let gamePaused = false; // Пауза игры
 let tapCount = 0; // Счетчик тапов для паузы
 let lastTapTime = 0; // Время последнего тапа
-let unlockedLevels = 1; // Количество открытых уровней
+// Функции для сохранения и загрузки прогресса
+function saveProgress() {
+    try {
+        localStorage.setItem('arkanoid_unlockedLevels', unlockedLevels.toString());
+    } catch (e) {
+        console.log('Не удалось сохранить прогресс:', e);
+    }
+}
+
+function loadProgress() {
+    try {
+        const saved = localStorage.getItem('arkanoid_unlockedLevels');
+        if (saved !== null) {
+            return parseInt(saved, 10);
+        }
+    } catch (e) {
+        console.log('Не удалось загрузить прогресс:', e);
+    }
+    return 1; // По умолчанию открыт только первый уровень
+}
+
+let unlockedLevels = loadProgress(); // Загружаем сохраненный прогресс
 
 // Управление с клавиатуры
 let keys = {
@@ -625,8 +646,8 @@ function generateLevel(level) {
     blocks = [];
     const cols = Math.floor(canvas.width / (BLOCK_WIDTH + BLOCK_PADDING));
     const isMobile = window.innerWidth < 768;
-    // Интерфейс в 40px от верха, блоки начинаются ниже
-    const interfaceHeight = 40;
+    // Интерфейс в 80px от верха, блоки начинаются ниже
+    const interfaceHeight = 80;
     const startY = interfaceHeight + 30; // 30px отступ после интерфейса
     // Минимальное расстояние от платформы
     const paddleY = isMobile ? canvas.height - 130 : canvas.height - 40;
@@ -1257,11 +1278,13 @@ function update() {
             winScreen.classList.remove('hidden');
             if (currentLevel > unlockedLevels) {
                 unlockedLevels = currentLevel;
+                saveProgress(); // Сохраняем прогресс
             }
         } else {
             currentLevel++;
             if (currentLevel > unlockedLevels) {
                 unlockedLevels = currentLevel;
+                saveProgress(); // Сохраняем прогресс
             }
             generateLevel(currentLevel);
             // Сброс позиции шаров (новый стартовый шар)
@@ -1534,6 +1557,8 @@ document.addEventListener('keyup', (e) => {
 // Инициализация меню выбора уровней
 function initLevelSelect() {
     if (!levelGrid) return;
+    // Загружаем актуальный прогресс перед показом меню
+    unlockedLevels = loadProgress();
     levelGrid.innerHTML = '';
     for (let i = 1; i <= 30; i++) {
         const cube = document.createElement('div');
@@ -1584,7 +1609,8 @@ restartWinBtn.addEventListener('click', () => {
 
 restartGameOverBtn.addEventListener('click', () => {
     gameOverScreen.classList.add('hidden');
-    resetGame();
+    levelSelectScreen.classList.remove('hidden');
+    initLevelSelect();
 });
 
 // ============================================
