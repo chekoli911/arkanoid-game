@@ -19,7 +19,9 @@ const levelSelectScreen = document.getElementById('levelSelectScreen');
 const pauseScreen = document.getElementById('pauseScreen');
 const resumeBtn = document.getElementById('resumeBtn');
 const backToMenuBtn = document.getElementById('backToMenuBtn');
+const menuFromPauseBtn = document.getElementById('menuFromPauseBtn');
 const levelGrid = document.getElementById('levelGrid');
+const soundToggle = document.getElementById('soundToggle');
 
 // ============================================
 // КОНСТАНТЫ И ПЕРЕМЕННЫЕ ИГРЫ
@@ -125,6 +127,7 @@ let paddleWideTimer = 0; // Таймер расширенной платформ
 let gamePaused = false; // Пауза игры
 let tapCount = 0; // Счетчик тапов для паузы
 let lastTapTime = 0; // Время последнего тапа
+let soundEnabled = true; // Звук включен по умолчанию
 // Функции для сохранения и загрузки прогресса
 function saveProgress() {
     try {
@@ -469,12 +472,16 @@ function playSound(frequency, duration, type = 'sine', volume = 0.3) {
 
 // Звук при отбивании шара платформой
 function playPaddleSound() {
-    playSound(400, 0.1, 'square', 0.2);
+    if (soundEnabled) {
+        playSound(400, 0.1, 'square', 0.2);
+    }
 }
 
 // Звук при разбивании блока
 function playBlockSound() {
-    playSound(200, 0.15, 'sawtooth', 0.25);
+    if (soundEnabled) {
+        playSound(200, 0.15, 'sawtooth', 0.25);
+    }
 }
 
 // ============================================
@@ -646,8 +653,8 @@ function generateLevel(level) {
     blocks = [];
     const cols = Math.floor(canvas.width / (BLOCK_WIDTH + BLOCK_PADDING));
     const isMobile = window.innerWidth < 768;
-    // Интерфейс в 80px от верха, блоки начинаются ниже
-    const interfaceHeight = 80;
+    // Интерфейс в 120px от верха, блоки начинаются ниже
+    const interfaceHeight = 120;
     const startY = interfaceHeight + 30; // 30px отступ после интерфейса
     // Минимальное расстояние от платформы
     const paddleY = isMobile ? canvas.height - 130 : canvas.height - 40;
@@ -1009,22 +1016,22 @@ function generateLevel(level) {
             radius += BLOCK_HEIGHT + BLOCK_PADDING + 5;
         }
     }
-    // Уровень 14: Стрелки
+    // Уровень 14: Стрелки (исправлено для избежания зависания)
     else if (level === 14) {
-        const arrowCount = 4;
+        const arrowCount = 3; // Уменьшено с 4 до 3
         const arrowWidth = Math.floor(cols / arrowCount);
         for (let a = 0; a < arrowCount && blockCount < targetCount; a++) {
             const arrowStartX = a * arrowWidth * (BLOCK_WIDTH + BLOCK_PADDING);
-            const arrowRows = 8;
+            const arrowRows = 6; // Уменьшено с 8 до 6
             // Стрелка вверх
             for (let row = 0; row < arrowRows && blockCount < targetCount; row++) {
-                const blocksInRow = arrowWidth - Math.abs(row - Math.floor(arrowRows / 2)) * 2;
-                if (blocksInRow > 0) {
+                const blocksInRow = Math.max(1, arrowWidth - Math.abs(row - Math.floor(arrowRows / 2)) * 2);
+                if (blocksInRow > 0 && blocksInRow <= cols) {
                     const startX = arrowStartX + (arrowWidth - blocksInRow) / 2 * (BLOCK_WIDTH + BLOCK_PADDING);
                     for (let col = 0; col < blocksInRow && blockCount < targetCount; col++) {
                         const x = Math.round(startX + col * (BLOCK_WIDTH + BLOCK_PADDING));
                         const y = Math.round(startY + row * (BLOCK_HEIGHT + BLOCK_PADDING));
-                        if (x + BLOCK_WIDTH <= canvas.width) {
+                        if (x >= 0 && x + BLOCK_WIDTH <= canvas.width && y >= startY) {
                             const block = createBlock(x, y, BLOCK_WIDTH, BLOCK_HEIGHT, startY, blocks, minDistanceFromPaddle);
                             if (block) {
                                 blocks.push(block);
@@ -1035,16 +1042,19 @@ function generateLevel(level) {
                 }
             }
         }
-        // Дополнительные блоки для заполнения
-        for (let row = arrowRows; row < 15 && blockCount < targetCount; row++) {
+        // Дополнительные блоки для заполнения (ограничено)
+        const maxAdditionalRows = 10; // Ограничение
+        for (let row = 6; row < maxAdditionalRows && blockCount < targetCount; row++) {
             for (let col = 0; col < cols && blockCount < targetCount; col++) {
                 if ((row + col) % 3 === 0) {
                     const x = Math.round(col * (BLOCK_WIDTH + BLOCK_PADDING));
                     const y = Math.round(startY + row * (BLOCK_HEIGHT + BLOCK_PADDING));
-                    const block = createBlock(x, y, BLOCK_WIDTH, BLOCK_HEIGHT, startY, blocks, minDistanceFromPaddle);
-                    if (block) {
-                        blocks.push(block);
-                        blockCount++;
+                    if (y + BLOCK_HEIGHT < paddleY - minDistanceFromPaddle) {
+                        const block = createBlock(x, y, BLOCK_WIDTH, BLOCK_HEIGHT, startY, blocks, minDistanceFromPaddle);
+                        if (block) {
+                            blocks.push(block);
+                            blockCount++;
+                        }
                     }
                 }
             }
@@ -1215,6 +1225,15 @@ function update() {
                 }
             } else {
                 // Обычный шар - просто удаляем
+                // Анимация -5 очков
+                scoreAnimations.push({
+                    x: ball.x,
+                    y: ball.y,
+                    text: '-5',
+                    life: 60, // 60 кадров анимации
+                    alpha: 1.0,
+                    color: '#ff1744' // Красный цвет
+                });
                 balls.splice(i, 1);
                 score = Math.max(0, score - 25);
                 updateUI();
@@ -1429,7 +1448,9 @@ function draw() {
         scoreAnimations.forEach(anim => {
             ctx.save();
             ctx.globalAlpha = anim.alpha;
-            ctx.font = 'bold 24px Arial';
+            // Тонкий шрифт для -5, обычный для +100
+            const fontSize = anim.text.startsWith('-') ? '20px' : 'bold 24px';
+            ctx.font = fontSize + ' Arial';
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
             
@@ -1437,8 +1458,8 @@ function draw() {
             ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
             ctx.fillText(anim.text, anim.x + 2, anim.y + 2);
             
-            // Основной текст
-            ctx.fillStyle = '#4caf50';
+            // Основной текст (красный для -5, зеленый для +100)
+            ctx.fillStyle = anim.color || '#4caf50';
             ctx.fillText(anim.text, anim.x, anim.y);
             
             ctx.restore();
@@ -1612,6 +1633,31 @@ restartGameOverBtn.addEventListener('click', () => {
     levelSelectScreen.classList.remove('hidden');
     initLevelSelect();
 });
+
+if (menuFromPauseBtn) {
+    menuFromPauseBtn.addEventListener('click', () => {
+        gamePaused = false;
+        if (pauseScreen) pauseScreen.classList.add('hidden');
+        if (levelSelectScreen) {
+            levelSelectScreen.classList.remove('hidden');
+            initLevelSelect();
+        }
+    });
+}
+
+if (soundToggle) {
+    // Загружаем сохраненную настройку звука
+    const savedSound = localStorage.getItem('arkanoid_soundEnabled');
+    if (savedSound !== null) {
+        soundEnabled = savedSound === 'true';
+        soundToggle.checked = soundEnabled;
+    }
+    
+    soundToggle.addEventListener('change', (e) => {
+        soundEnabled = e.target.checked;
+        localStorage.setItem('arkanoid_soundEnabled', soundEnabled.toString());
+    });
+}
 
 // ============================================
 // ЗАПУСК ИГРЫ
