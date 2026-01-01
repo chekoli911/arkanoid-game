@@ -83,7 +83,7 @@
 
         .info {
             position: absolute;
-            top: 120px;
+            top: 10px;
             left: 10px;
             right: 10px;
             color: white;
@@ -95,6 +95,12 @@
             align-items: center;
             flex-wrap: wrap;
             gap: 10px;
+        }
+
+        @media (max-width: 768px) {
+            .info {
+                top: 120px;
+            }
         }
 
         .info span {
